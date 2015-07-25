@@ -19,9 +19,6 @@
 
 start() ->
 	start_link(),
-	login("Pavian",self()),
-	login("Boris",self()),
-	login("Serge",self()),
 	create_mails().
 
 create_mails()->
@@ -64,6 +61,15 @@ init([]) ->
 	}.
 
 handle_call({login,Login,Pid}, _From, State) ->
+	%first check for previous logins and remove notifiers:
+	ets:delete(State#state.notify_pid,Pid),
+
+	%there will be some trouble if client will login second time without logout:
+	%  his notification handlers will not be deleted.
+	%  and if client simultaneously logins from several points,
+	%  his notification handlers when he logs out 
+	%  will be treated as  belonging to a single point and all be deleted
+
 	ets:insert(State#state.users, {Login}),
 	ets:insert(State#state.online, {Pid,Login}),
 	link(Pid),  %catch if pid exits
