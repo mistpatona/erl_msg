@@ -8,7 +8,7 @@
      	terminate/2, 
 	code_change/3]).
 
--export([login/2,logout/1,listonline/1,listallusers/1,
+-export([login/2,logout/1,listonline/1,listallusers/1,whoami/1,
 	sendmessage/3,fetchmessage/2,getmessagelistforme/1,
 	getsessionwith/2]).
 
@@ -73,9 +73,14 @@ handle_call({logout,Pid}, _From, State) ->
 	io:format("Logout: ~p from ~w~n",[Rec,Pid]),
 	{reply,ok,State};
 
-handle_call({who_is_online,Pid}, _From, State) ->
+handle_call({who_am_i,Pid}, _From, State) ->
+	Login = get_login(Pid,State),
+	{reply,{ok,Login},State};
+
+handle_call({who_is_online,_Pid}, _From, State) ->
 	T=ets:tab2list(State#state.online),
-	R=[L || {P,L} <- T, P =/= Pid], %except asker
+	%R=[L || {P,L} <- T, P =/= Pid], %except asker
+	R=[L || {_P,L} <- T],
 	{reply,{ok,R},State};
 
 handle_call({all_users,_Pid}, _From, State) ->
@@ -105,8 +110,9 @@ handle_call({fetch,Pid,Mid}, _From, State) ->
 	%io:format("Found message: ~p~n",[M]),
         {_Mid,To,Fr,_Body} = M, 
 	[{_P,L}] = ets:lookup(State#state.online,Pid),
-	case (L =:= To) andalso ( L =:= Fr) of
-		false -> %erlang:error("letter does not belong to asker");
+	%io:format("You:~p Sender:~p Recepient:~p~n",[L,Fr,To]),
+	case (L =/= To) andalso ( L =/= Fr) of
+		true -> 
 			{reply,{error,"not your letter"},State};
 		_ -> 	{reply,{ok,M},State}
 	end;
@@ -179,6 +185,9 @@ login(L,Pid) ->
 
 logout(Pid) ->
 	gen_server:call(?SERVER,{logout,Pid}).
+
+whoami(Pid) ->
+	gen_server:call(?SERVER,{who_am_i,Pid}).
 
 listonline(Pid) ->
 	gen_server:call(?SERVER,{who_is_online,Pid}).
