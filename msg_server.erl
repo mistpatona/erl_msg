@@ -9,12 +9,13 @@
 	code_change/3]).
 
 -export([login/2,logout/1,listonline/1,listallusers/1,whoami/1,
+	registernotifications/1,
 	sendmessage/3,fetchmessage/2,getmessagelistforme/1,
 	getsessionwith/2]).
 
 
 -record(state, {
-	users,online,messages,sndrs,rcvrs}).
+	users,online,messages,sndrs,rcvrs,notify_login,notify_pid}).
 
 start() ->
 	start_link(),
@@ -37,7 +38,8 @@ create_mails()->
 	sendmessage(self(),"Boris","uh-uh-uh"),
 	sendmessage(self(),"Makaka","uh-uh-uh"),
 	login("Serge",self()),
-	sendmessage(self(),"Pavian","uuuhhhh!").
+	sendmessage(self(),"Pavian","uuuhhhh!"),
+	logout(self()).
 
 start_link() ->
     gen_server:start_link({global, ?MODULE}, ?MODULE, [], []).
@@ -55,7 +57,9 @@ init([]) ->
 		online 		= ets:new(?MODULE,[set]),
 		messages 	= M, 
 		sndrs 		= ets:new(?MODULE,[bag]),
-		rcvrs 		= ets:new(?MODULE,[bag])
+		rcvrs 		= ets:new(?MODULE,[bag]),
+		notify_login	= ets:new(?MODULE,[bag]),
+		notify_pid	= ets:new(?MODULE,[bag])
 		}
 	}.
 
@@ -70,7 +74,19 @@ handle_call({logout,Pid}, _From, State) ->
 	unlink(Pid),
 	Rec=ets:lookup(State#state.online,Pid),
 	ets:delete(State#state.online,Pid),
-	io:format("Logout: ~p from ~w~n",[Rec,Pid]),
+	Login = hd(Rec),
+
+	ets:delete(State#state.notify_login,Login),
+	ets:delete(State#state.notify_pid,Pid),
+
+	io:format("Logout: ~p from ~w~n",[Login,Pid]),
+	{reply,ok,State};
+
+handle_call({register_callback,UserPid,NotifiedPid}, _From, State) ->
+	Login = get_login(UserPid,State),
+	ets:insert(State#state.notify_login,{Login,NotifiedPid}),
+	ets:insert(State#state.notify_pid,{UserPid,NotifiedPid}),
+	io:format("Registered for notifications: Pid:~p User:~p~n",[NotifiedPid,Login]),
 	{reply,ok,State};
 
 handle_call({who_am_i,Pid}, _From, State) ->
@@ -98,6 +114,8 @@ handle_call({send,Pid,To,Body}, _From, State) ->
 	ets:insert(State#state.messages,{Mid,To,From,Body}), % timestamp not needed, messages can be sorted by message id
 	ets:insert(State#state.sndrs,{From,Mid}),
 	ets:insert(State#state.rcvrs,{To,Mid}),
+	NoteMsg=lists:flatten([From,": ",Body]),
+	notify_remotes(To,NoteMsg,State),
 	{reply,{ok,Mid},State};
 
 handle_call({fetch,Pid,Mid}, _From, State) ->
@@ -172,6 +190,10 @@ get_login(Pid,State) ->
 		_ -> not_logged_in
 	end.
 
+notify_remotes(Login,Msg,State) ->
+	L = ets:lookup(State#state.notify_login,Login),
+	[ X ! Msg || {_,X} <- L ].
+
 intersect(M,N) ->
 	I=sets:intersection(sets:from_list(M),sets:from_list(N)),
 	sets:to_list(I).
@@ -207,3 +229,5 @@ getmessagelistforme(Pid) ->
 getsessionwith(Pid,Friend) ->
 	gen_server:call(?SERVER,{get_session_with,Pid,Friend}).
 
+registernotifications(Pid)->
+	gen_server:call(?SERVER,{register_callback,self(),Pid}).

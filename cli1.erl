@@ -4,8 +4,12 @@
 
 %-import(msg_server,[login/2,logout/1]).
 % net_adm:ping('srv@harlot.internal').
+ping() -> net_adm:ping('srv@harlot.internal')==pong.
 
-login(Name) -> msg_server:login(Name,self()).
+login(Name) -> 	A=msg_server:login(Name,self()),
+		P=notif:notifier(),
+		msg_server:registernotifications(P),
+		A.
 
 logout() -> msg_server:logout(self()).
 
@@ -37,10 +41,10 @@ showhistory(Friend) ->
 
 showhistorytext(Friend) ->
 	{ok,L} = showhistory(Friend),
-	lists:foreach(fun(M) -> io:format("~p~n",[fetched_to_string(showmsg(M))]) end ,L).
+	lists:foreach(fun(M) -> io:format("~s~n",[fetched_to_string(showmsg(M))]) end ,L).
 
 fetched_to_string({ok,{_,To,Fr,Body}}) ->
-	lists:flatten([Fr,"->",To," ",Body,"\n"]);
+	lists:flatten([Fr,"->",To," ",Body]);
 fetched_to_string(Msg) ->
 	lists:flatten(["Some error in: ",Msg]).
 
