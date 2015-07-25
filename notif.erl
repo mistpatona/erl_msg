@@ -4,9 +4,11 @@
 
 loop() ->
 	receive
-		X -> io:format("Notification: ~p~n",[X])
-	end,
-	loop().
+		{message,M} -> io:put_chars(M),io:nl(),loop();
+		shutdown -> ok;
+		X -> io:format("Notification: ~s~n",[X]),loop()
+	end.
+	%loop().
 
 notifier() -> spawn_link(fun loop/0).
 

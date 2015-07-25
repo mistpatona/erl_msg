@@ -2,16 +2,18 @@
 
 -compile(export_all). % development
 
-%-import(msg_server,[login/2,logout/1]).
-% net_adm:ping('srv@harlot.internal').
 ping() -> net_adm:ping('srv@harlot.internal')==pong.
 
 login(Name) -> 	A=msg_server:login(Name,self()),
 		P=notif:notifier(),
 		msg_server:registernotifications(P),
+		put(notifier_pid,P),
 		A.
 
-logout() -> msg_server:logout(self()).
+logout() -> msg_server:logout(self()),
+		P=get(notifier_pid),
+		if is_pid(P) -> P ! shutdown 
+		end.
 
 listusers() ->
 	All_1 = msg_server:listallusers(self()),

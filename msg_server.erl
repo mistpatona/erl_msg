@@ -83,13 +83,12 @@ handle_call({logout,Pid}, _From, State) ->
 	unlink(Pid),
 	Rec=ets:lookup(State#state.online,Pid),
 	ets:delete(State#state.online,Pid),
-	Login = hd(Rec),
+	%Login = hd(Rec),
 
-	%ets:delete(State#state.notify_login,Login),
 	ets:delete(State#state.notify_pid,Pid),
 	NewNP=pidmap:build_pid_map(ets:tab2list(State#state.notify_pid)),
 
-	io:format("Logout: ~p from ~w~n",[Login,Pid]),
+	io:format("Logout: ~p from ~w~n",[Rec,Pid]),
 	{reply,ok,State#state{notify_map=NewNP}};
 
 handle_call({register_callback,UserPid,NotifiedPid}, _From, State) ->
@@ -126,7 +125,7 @@ handle_call({send,Pid,To,Body}, _From, State) ->
 	ets:insert(State#state.sndrs,{From,Mid}),
 	ets:insert(State#state.rcvrs,{To,Mid}),
 	NoteMsg=lists:flatten([From,": ",Body]),
-	notify_remotes(To,NoteMsg,State),
+	notify_remotes(To,{message,NoteMsg},State),
 	{reply,{ok,Mid},State};
 
 handle_call({fetch,Pid,Mid}, _From, State) ->
