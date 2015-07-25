@@ -14,8 +14,6 @@
 	getsessionwith/2]).
 
 
--record(state, {
-	users,online,messages,sndrs,rcvrs,notify_login,notify_pid}).
 
 start() ->
 	start_link(),
@@ -44,19 +42,24 @@ start_link() ->
 
 -define(SERVER, global:whereis_name(?MODULE)).
 
+-record(state, {
+	users,online,messages,sndrs,rcvrs,notify_pid,notify_map}).
+
 init([]) ->
 	process_flag(trap_exit,true), %we need to catch exited pids
 	io:format("~w Initing database~n",[self()]),
 	M = ets:new(?MODULE,[set]),
 	ets:insert(M,{lastMid,0}),
+	NP = ets:new(?MODULE,[bag]),
 	{ok, #state{
 		users 		= ets:new(?MODULE,[set]),
 		online 		= ets:new(?MODULE,[set]),
 		messages 	= M, 
 		sndrs 		= ets:new(?MODULE,[bag]),
 		rcvrs 		= ets:new(?MODULE,[bag]),
-		notify_login	= ets:new(?MODULE,[bag]),
-		notify_pid	= ets:new(?MODULE,[bag])
+		notify_pid	= NP,
+		notify_map	= pidmap:build_pid_map(ets:tab2list(NP))
+		%notify_login	= ets:new(?MODULE,[bag]),
 		}
 	}.
 
@@ -82,18 +85,20 @@ handle_call({logout,Pid}, _From, State) ->
 	ets:delete(State#state.online,Pid),
 	Login = hd(Rec),
 
-	ets:delete(State#state.notify_login,Login),
+	%ets:delete(State#state.notify_login,Login),
 	ets:delete(State#state.notify_pid,Pid),
+	NewNP=pidmap:build_pid_map(ets:tab2list(State#state.notify_pid)),
 
 	io:format("Logout: ~p from ~w~n",[Login,Pid]),
-	{reply,ok,State};
+	{reply,ok,State#state{notify_map=NewNP}};
 
 handle_call({register_callback,UserPid,NotifiedPid}, _From, State) ->
 	Login = get_login(UserPid,State),
-	ets:insert(State#state.notify_login,{Login,NotifiedPid}),
-	ets:insert(State#state.notify_pid,{UserPid,NotifiedPid}),
+	%ets:insert(State#state.notify_login,{Login,NotifiedPid}),
+	ets:insert(State#state.notify_pid,{UserPid,NotifiedPid,Login}),
+	NewNP=pidmap:build_pid_map(ets:tab2list(State#state.notify_pid)),
 	io:format("Registered for notifications: Pid:~p User:~p~n",[NotifiedPid,Login]),
-	{reply,ok,State};
+	{reply,ok,State#state{notify_map=NewNP}};
 
 handle_call({who_am_i,Pid}, _From, State) ->
 	Login = get_login(Pid,State),
@@ -197,8 +202,11 @@ get_login(Pid,State) ->
 	end.
 
 notify_remotes(Login,Msg,State) ->
-	L = ets:lookup(State#state.notify_login,Login),
-	[ X ! Msg || {_,X} <- L ].
+	L = State#state.notify_map,
+	%io:format("Notif Map: ~p~n",[L]),
+	L2 = [ X || {Logi,X} <- L, Logi =:= Login ],
+	R = lists:flatten(L2),
+	[ X ! Msg || X <- R ].
 
 intersect(M,N) ->
 	I=sets:intersection(sets:from_list(M),sets:from_list(N)),

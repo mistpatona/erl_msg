@@ -48,5 +48,7 @@ fetched_to_string({ok,{_,To,Fr,Body}}) ->
 fetched_to_string(Msg) ->
 	lists:flatten(["Some error in: ",Msg]).
 
+whoami() -> msg_server:whoami(self()).
+
 
 
