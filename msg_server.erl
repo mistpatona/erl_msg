@@ -10,12 +10,11 @@
 
 -export([login/2,logout/1,listonline/1,listallusers/1,
 	sendmessage/3,fetchmessage/2,getmessagelistforme/1,
-	getunreadmessagelistforme/1,getreadmessagelistforme/1,
 	getsessionwith/2]).
 
 
 -record(state, {
-	users,online,messages,sndrs,rcvrs,delivered,notdelivered}).
+	users,online,messages,sndrs,rcvrs}).
 
 start() ->
 	start_link(),
@@ -56,9 +55,7 @@ init([]) ->
 		online 		= ets:new(?MODULE,[set]),
 		messages 	= M, 
 		sndrs 		= ets:new(?MODULE,[bag]),
-		rcvrs 		= ets:new(?MODULE,[bag]),
-		delivered 	= ets:new(?MODULE,[set]),
-		notdelivered 	= ets:new(?MODULE,[set])
+		rcvrs 		= ets:new(?MODULE,[bag])
 		}
 	}.
 
@@ -94,7 +91,6 @@ handle_call({send,Pid,To,Body}, _From, State) ->
 	end,
 	ets:insert(State#state.messages,{lastMid,Mid}),
 	ets:insert(State#state.messages,{Mid,To,From,Body}), % timestamp not needed, messages can be sorted by message id
-	ets:insert(State#state.notdelivered,{Mid}),
 	ets:insert(State#state.sndrs,{From,Mid}),
 	ets:insert(State#state.rcvrs,{To,Mid}),
 	{reply,{ok,Mid},State};
@@ -112,28 +108,13 @@ handle_call({fetch,Pid,Mid}, _From, State) ->
 	case (L =:= To) andalso ( L =:= Fr) of
 		false -> %erlang:error("letter does not belong to asker");
 			{reply,{error,"not your letter"},State};
-		_ -> 	ets:insert(State#state.delivered,{Mid}),
-			ets:delete(State#state.notdelivered,Mid),
-			{reply,{ok,M},State}
+		_ -> 	{reply,{ok,M},State}
 	end;
 
 handle_call({get_message_list_for_me,Pid}, _From, State) ->
 	Login = get_login(Pid,State),
 	L = ets:lookup(State#state.rcvrs,Login),
 	M = [X || {_,X} <- L],
-	{reply,{ok,M},State};
-
-handle_call({get_unread_message_list_for_me,Pid}, _From, State) ->
-	Login = get_login(Pid,State),
-	L = ets:lookup(State#state.rcvrs,Login),
-	M = [X || {_,X} <- L, ets:member(State#state.notdelivered,X)],
-	{reply,{ok,M},State};
-
-
-handle_call({get_read_message_list_for_me,Pid}, _From, State) ->
-	Login = get_login(Pid,State),
-	L = ets:lookup(State#state.rcvrs,Login),
-	M = [X || {_,X} <- L, ets:member(State#state.delivered,X)],
 	{reply,{ok,M},State};
 
 handle_call({get_session_with,Pid,Friend}, _From, State) ->
@@ -214,13 +195,6 @@ fetchmessage(Pid,Mid) ->
 getmessagelistforme(Pid) ->
 	gen_server:call(?SERVER,{get_message_list_for_me,Pid}).
 
-getunreadmessagelistforme(Pid) ->
-	gen_server:call(?SERVER,{get_unread_message_list_for_me,Pid}).
-
-getreadmessagelistforme(Pid) ->
-	gen_server:call(?SERVER,{get_read_message_list_for_me,Pid}).
-
-%{get_session_with,Pid,Friend}
 getsessionwith(Pid,Friend) ->
 	gen_server:call(?SERVER,{get_session_with,Pid,Friend}).
 
