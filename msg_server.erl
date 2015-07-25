@@ -115,7 +115,8 @@ handle_call({all_users,_Pid}, _From, State) ->
 	{reply,{ok,R},State};
 
 handle_call({send,Pid,To,Body}, _From, State) ->
-	[{_P,From}]=ets:lookup(State#state.online,Pid),
+	%[{_P,From}]=ets:lookup(State#state.online,Pid),
+	From = get_login(Pid,State),
 	Mid = case ets:lookup(State#state.messages,lastMid) of
 		[{_,OldMid}] -> OldMid+1;
 		_ -> erlang:error("No lastMid record found in messages table")
@@ -137,7 +138,8 @@ handle_call({fetch,Pid,Mid}, _From, State) ->
 	end,
 	%io:format("Found message: ~p~n",[M]),
         {_Mid,To,Fr,_Body} = M, 
-	[{_P,L}] = ets:lookup(State#state.online,Pid),
+	%[{_P,L}] = ets:lookup(State#state.online,Pid),
+	L = get_login(Pid,State),
 	%io:format("You:~p Sender:~p Recepient:~p~n",[L,Fr,To]),
 	case (L =/= To) andalso ( L =/= Fr) of
 		true -> 
